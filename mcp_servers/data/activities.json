@@ -1,0 +1,11 @@
+{
+  "by_type": {
+    "explorer": ["Old town walking tour", "Local food crawl", "Museum & history quarter", "Hidden viewpoints hike", "Artisan market visit"],
+    "leisure": ["City highlights tour", "River/harbour cruise", "Shopping district", "Rooftop sunset bar", "Botanical gardens"],
+    "relaxing": ["Spa & wellness morning", "Beach day", "Slow brunch & cafe-hopping", "Sunset yoga", "Scenic drive"],
+    "adventure": ["Day hike to summit", "Water sports session", "Zipline & canopy tour", "Kayaking trip", "Cycling expedition"],
+    "business": ["Co-working morning", "Networking dinner", "Quick city highlights", "Airport-area meeting block", "Evening downtime"],
+    "family": ["Theme/amusement park", "Interactive science museum", "Zoo or aquarium", "Easy nature walk", "Beach & ice-cream"]
+  },
+  "meals": ["Local breakfast spot", "Street-food lunch", "Highly-rated dinner", "Dessert & coffee"]
+}

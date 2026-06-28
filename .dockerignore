@@ -1,0 +1,16 @@
+.venv/
+**/__pycache__/
+*.pyc
+.git/
+.gitignore
+web/node_modules/
+web/.next/
+web/out/
+.deepeval/
+.deepeval_telemetry.txt
+install_log.txt
+*.log
+terminals/
+docs/
+svgs/
+Assets/

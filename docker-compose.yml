@@ -1,0 +1,141 @@
+# ============================================================================
+#  Full stack for the "Keeping Eyes on Your Agents" trip-planner demo.
+#
+#    4 mock MCP servers  +  FastAPI agent API  +  Next.js UI
+#
+#  Quick start:
+#    1) copy .env.example to .env and set OPENAI_API_KEY
+#    2) docker compose up --build
+#    3) open http://localhost:3000   (API at http://localhost:8000)
+#
+#  Optional Layer-4 gateway (Obot):
+#    docker compose --profile gateway up --build
+# ============================================================================
+
+x-app: &app
+  build:
+    context: .
+  image: trip-planner-app:local
+  restart: unless-stopped
+  networks: [tripnet]
+
+services:
+  # ---- Mock MCP servers (the "context layer" / tools) ---------------------
+  flights:
+    <<: *app
+    command: ["python", "mcp_servers/flights_server.py"]
+    environment:
+      MCP_HOST: "0.0.0.0"
+    ports: ["8001:8001"]
+
+  hotels:
+    <<: *app
+    command: ["python", "mcp_servers/hotels_server.py"]
+    environment:
+      MCP_HOST: "0.0.0.0"
+    ports: ["8002:8002"]
+
+  activities:
+    <<: *app
+    command: ["python", "mcp_servers/activities_server.py"]
+    environment:
+      MCP_HOST: "0.0.0.0"
+    ports: ["8003:8003"]
+
+  booking:
+    <<: *app
+    command: ["python", "mcp_servers/booking_server.py"]
+    environment:
+      MCP_HOST: "0.0.0.0"
+    ports: ["8004:8004"]
+
+  # ---- Agent API (LangGraph + DeepEval) ----------------------------------
+  api:
+    <<: *app
+    command:
+      ["python", "-m", "uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      DEEPEVAL_JUDGE_MODEL: ${DEEPEVAL_JUDGE_MODEL:-gpt-4o}
+      PRICE_INPUT_PER_M: ${PRICE_INPUT_PER_M:-0.15}
+      PRICE_OUTPUT_PER_M: ${PRICE_OUTPUT_PER_M:-0.60}
+      # Reach the MCP servers by their compose service names.
+      MCP_FLIGHTS_URL: http://flights:8001/mcp
+      MCP_HOTELS_URL: http://hotels:8002/mcp
+      MCP_ACTIVITIES_URL: http://activities:8003/mcp
+      MCP_BOOKING_URL: http://booking:8004/mcp
+      USE_MCP_GATEWAY: ${USE_MCP_GATEWAY:-false}
+      # Layer 4: route MCP traffic through the Obot gateway so every tool call is
+      # observed. These are Obot "connect" URLs for the catalog entries we create
+      # (reachable from this container via the `obot` service name). Used only
+      # when USE_MCP_GATEWAY=true. IDs come from Obot and persist in obot-data.
+      MCP_GATEWAY_FLIGHTS_URL: ${MCP_GATEWAY_FLIGHTS_URL:-http://obot:8080/mcp-connect/default-trip-flights-mock-8cb52630pkb85}
+      MCP_GATEWAY_HOTELS_URL: ${MCP_GATEWAY_HOTELS_URL:-http://obot:8080/mcp-connect/default-trip-hotels-mock-50f96e7esz8ht}
+      MCP_GATEWAY_ACTIVITIES_URL: ${MCP_GATEWAY_ACTIVITIES_URL:-http://obot:8080/mcp-connect/default-trip-activities-mock-d795da428hfzr}
+      MCP_GATEWAY_BOOKING_URL: ${MCP_GATEWAY_BOOKING_URL:-http://obot:8080/mcp-connect/default-trip-booking-mock-cc2447b8sx7wj}
+      INJECT_REGRESSION: ${INJECT_REGRESSION:-false}
+      # Persist eval run history / uploaded goldens / tool tally across container
+      # recreation (mounted volume below).
+      EVAL_DATA_DIR: /app/.data
+      # Obot link surfaced in the Eval Studio dashboard (browser-reachable URL).
+      OBOT_PUBLIC_URL: ${OBOT_PUBLIC_URL:-http://localhost:8080}
+      # Optional: set CONFIDENT_API_KEY in .env to stream traces to Confident AI.
+      CONFIDENT_API_KEY: ${CONFIDENT_API_KEY:-}
+      CONFIDENT_TRACE_VERBOSE: ${CONFIDENT_TRACE_VERBOSE:-0}
+      # Flush traces on exit so short-lived runs (eval scripts) also post; the
+      # long-running API server posts continuously regardless.
+      CONFIDENT_TRACE_FLUSH: ${CONFIDENT_TRACE_FLUSH:-1}
+    volumes:
+      - eval-data:/app/.data
+    ports: ["8000:8000"]
+    depends_on: [flights, hotels, activities, booking]
+
+  # ---- Next.js UI --------------------------------------------------------
+  web:
+    build:
+      context: ./web
+      args:
+        # The browser talks to the API on the host-published port.
+        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:8000}
+    image: trip-planner-web:local
+    restart: unless-stopped
+    networks: [tripnet]
+    ports: ["3000:3000"]
+    depends_on: [api]
+
+  # ---- Obot gateway (Layer 4 — codeless MCP observability) ----------------
+  obot:
+    image: ghcr.io/obot-platform/obot:latest
+    networks: [tripnet]
+    ports: ["8080:8080"]
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # Auth DISABLED for the local demo => no login token needed; just open the
+      # UI. Safe only on a trusted local machine: with auth off, anyone who can
+      # reach :8080 can manage/launch MCP servers. Re-enable for anything else.
+      OBOT_SERVER_ENABLE_AUTHENTICATION: "false"
+      OBOT_SERVER_HOSTNAME: localhost:8080
+      # The mock MCP servers live on the docker bridge network (private IPs like
+      # flights:8001 -> 172.x). Obot blocks private/localhost/link-local MCP URLs
+      # by default (SSRF protection); opt out for this local demo. Both spellings
+      # of the private-IP flag are set due to an acronym-casing bug in older
+      # builds (see obot-platform/obot#7001).
+      OBOT_SERVER_DISALLOW_PRIVATE_IP_MCP: "false"
+      OBOT_SERVER_DISALLOW_PRIVATE_IPMCP: "false"
+      OBOT_SERVER_DISALLOW_LOCALHOST_MCP: "false"
+      OBOT_SERVER_DISALLOW_LINK_LOCAL_MCP: "false"
+    volumes:
+      - obot-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+    depends_on: [flights, hotels, activities, booking]
+
+networks:
+  tripnet:
+    driver: bridge
+
+volumes:
+  obot-data:
+  eval-data:

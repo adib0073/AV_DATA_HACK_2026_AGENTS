@@ -216,3 +216,26 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# DeepEval / Confident AI local artifacts
+.deepeval/
+.deepeval_telemetry.txt
+.deepeval-cache.json
+temp_test_run_data.json
+
+# Eval Studio runtime state (uploaded goldens + run history + tool tally)
+# Lives in EVAL_DATA_DIR (a Docker volume in compose, ./.data locally).
+.data/
+evals/_active_goldens.json
+evals/_run_history.json
+evals/_tool_tally.json
+
+# Demo / local logs & scratch files
+install_log.txt
+api_out.txt
+api_err.txt
+req.json
+
+# Never commit any local env files (extra safety on top of .env above)
+.env.*
+!.env.example

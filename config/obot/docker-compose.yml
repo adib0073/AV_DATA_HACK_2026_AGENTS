@@ -1,0 +1,41 @@
+# ============================================================================
+#  Obot - open-source MCP Gateway + AI Gateway (Layer 4)
+#  Reverse-proxies the mock MCP servers and (optionally) the LLM, so every tool
+#  call and token of spend is captured WITHOUT touching the agent's code.
+#
+#  Start:  docker compose -f config/obot/docker-compose.yml up -d
+#  UI:     http://localhost:8080   (find bootstrap token in `docker logs obot`)
+#  Stop:   docker compose -f config/obot/docker-compose.yml down
+# ============================================================================
+
+services:
+  obot:
+    image: ghcr.io/obot-platform/obot:latest
+    container_name: obot
+    ports:
+      - "8080:8080"
+    environment:
+      # Obot uses this key for its own agent features AND for the LLM proxy that
+      # tracks token burn in USD (the "AI gateway" capability).
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # Keep auth on for anything beyond a throwaway local demo.
+      OBOT_SERVER_ENABLE_AUTHENTICATION: "true"
+      OBOT_BOOTSTRAP_TOKEN: ${OBOT_BOOTSTRAP_TOKEN:-changeme-bootstrap}
+      OBOT_SERVER_HOSTNAME: localhost:8080
+    volumes:
+      - obot-data:/data
+      # Lets Obot launch/host MCP servers as sibling containers when you use its
+      # catalog. (Our demo registers the mock servers as *remote* MCP servers, so
+      # this is only needed if you also host containerized servers via Obot.)
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+volumes:
+  obot-data:
+# ----------------------------------------------------------------------------
+# NOTE for Windows / Docker Desktop:
+#   The mock MCP servers run as Python processes on the HOST. From inside the
+#   Obot container, reach them at  http://host.docker.internal:8001/mcp  (etc.),
+#   NOT http://localhost. Use those host.docker.internal URLs when registering
+#   the remote MCP servers in the Obot admin UI.
+# ----------------------------------------------------------------------------

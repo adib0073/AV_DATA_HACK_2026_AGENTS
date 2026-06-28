@@ -1,0 +1,12 @@
+[
+  {"name": "IndiGo", "rating": 4.1},
+  {"name": "Emirates", "rating": 4.7},
+  {"name": "Singapore Airlines", "rating": 4.8},
+  {"name": "Lufthansa", "rating": 4.3},
+  {"name": "Qatar Airways", "rating": 4.7},
+  {"name": "British Airways", "rating": 4.2},
+  {"name": "Air France", "rating": 4.2},
+  {"name": "United", "rating": 3.9},
+  {"name": "Delta", "rating": 4.1},
+  {"name": "ANA", "rating": 4.6}
+]

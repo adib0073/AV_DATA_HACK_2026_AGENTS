@@ -1,0 +1,15 @@
+{
+  "brands": [
+    {"name": "Grand Marina", "style": "luxury", "stars": 5},
+    {"name": "The Boutique House", "style": "boutique", "stars": 4},
+    {"name": "Seaside Resort & Spa", "style": "relaxing", "stars": 5},
+    {"name": "City Central Inn", "style": "business", "stars": 4},
+    {"name": "Backpacker's Nest", "style": "budget", "stars": 3},
+    {"name": "Heritage Palace", "style": "explorer", "stars": 4},
+    {"name": "Skyline Suites", "style": "business", "stars": 4},
+    {"name": "Lagoon Villas", "style": "relaxing", "stars": 5},
+    {"name": "Old Town Lodge", "style": "explorer", "stars": 3},
+    {"name": "Family Garden Hotel", "style": "family", "stars": 4}
+  ],
+  "amenities": ["Free WiFi", "Breakfast included", "Pool", "Spa", "Gym", "Airport shuttle", "Pet friendly", "Family rooms"]
+}

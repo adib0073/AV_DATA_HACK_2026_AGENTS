@@ -81,6 +81,15 @@ services:
       EVAL_DATA_DIR: /app/.data
       # Obot link surfaced in the Eval Studio dashboard (browser-reachable URL).
       OBOT_PUBLIC_URL: ${OBOT_PUBLIC_URL:-http://localhost:8080}
+      # Layer 3 trace timeline via self-hosted Langfuse (open-source). The agent
+      # posts traces to the in-network service; the UI links to the browser URL.
+      # Keys are auto-provisioned by langfuse-web via LANGFUSE_INIT_* below.
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-pk-lf-datahack-public}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-sk-lf-datahack-secret}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-http://langfuse-web:3000}
+      LANGFUSE_PUBLIC_URL: ${LANGFUSE_PUBLIC_URL:-http://localhost:3001}
+      LANGFUSE_PROJECT_ID: ${LANGFUSE_PROJECT_ID:-trip-planner}
+      LANGFUSE_TRACING_ENABLED: ${LANGFUSE_TRACING_ENABLED:-true}
       # Optional: set CONFIDENT_API_KEY in .env to stream traces to Confident AI.
       CONFIDENT_API_KEY: ${CONFIDENT_API_KEY:-}
       CONFIDENT_TRACE_VERBOSE: ${CONFIDENT_TRACE_VERBOSE:-0}
@@ -132,6 +141,139 @@ services:
     restart: unless-stopped
     depends_on: [flights, hotels, activities, booking]
 
+  # ---- Langfuse (Layer 3 — self-hosted trace timeline) --------------------
+  # Open-source alternative to Confident AI. langfuse-web auto-provisions an org,
+  # project, and API keys on first boot (LANGFUSE_INIT_*), so the api service can
+  # post traces immediately with no manual login. UI: http://localhost:3001
+  # (login admin@datahack.local / langfuse-demo). All secrets below are local
+  # demo values for a self-hosted instance — not real cloud credentials.
+  langfuse-web:
+    image: docker.io/langfuse/langfuse:3
+    restart: unless-stopped
+    networks: [tripnet]
+    depends_on: &langfuse-deps
+      langfuse-postgres: {condition: service_healthy}
+      langfuse-minio: {condition: service_healthy}
+      langfuse-redis: {condition: service_healthy}
+      langfuse-clickhouse: {condition: service_healthy}
+    ports: ["3001:3000"]
+    environment: &langfuse-env
+      DATABASE_URL: postgresql://postgres:postgres@langfuse-postgres:5432/postgres
+      SALT: datahack-salt
+      ENCRYPTION_KEY: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+      TELEMETRY_ENABLED: "false"
+      LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "false"
+      CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: miniosecret
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://localhost:9090
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+      REDIS_HOST: langfuse-redis
+      REDIS_PORT: "6379"
+      REDIS_AUTH: datahack-redis
+      NEXTAUTH_URL: http://localhost:3001
+      NEXTAUTH_SECRET: datahack-nextauth-secret
+      # Auto-provision org/project/keys/user on first boot (idempotent).
+      LANGFUSE_INIT_ORG_ID: datahack
+      LANGFUSE_INIT_ORG_NAME: Data Hack Summit
+      LANGFUSE_INIT_PROJECT_ID: trip-planner
+      LANGFUSE_INIT_PROJECT_NAME: Trip Planner
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-datahack-public
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-datahack-secret
+      LANGFUSE_INIT_USER_EMAIL: admin@datahack.local
+      LANGFUSE_INIT_USER_NAME: Admin
+      LANGFUSE_INIT_USER_PASSWORD: langfuse-demo
+
+  langfuse-worker:
+    image: docker.io/langfuse/langfuse-worker:3
+    restart: unless-stopped
+    networks: [tripnet]
+    depends_on: *langfuse-deps
+    environment: *langfuse-env
+
+  langfuse-clickhouse:
+    image: docker.io/clickhouse/clickhouse-server
+    restart: unless-stopped
+    networks: [tripnet]
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+    volumes:
+      - langfuse-clickhouse-data:/var/lib/clickhouse
+      - langfuse-clickhouse-logs:/var/log/clickhouse-server
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 1s
+
+  langfuse-minio:
+    image: docker.io/minio/minio
+    restart: unless-stopped
+    networks: [tripnet]
+    entrypoint: sh
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: miniosecret
+    ports: ["9090:9000"]
+    volumes:
+      - langfuse-minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  langfuse-redis:
+    image: docker.io/redis:7
+    restart: unless-stopped
+    networks: [tripnet]
+    command: --requirepass datahack-redis --maxmemory-policy noeviction
+    volumes:
+      - langfuse-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "datahack-redis", "ping"]
+      interval: 3s
+      timeout: 10s
+      retries: 10
+
+  langfuse-postgres:
+    image: docker.io/postgres:17
+    restart: unless-stopped
+    networks: [tripnet]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - langfuse-postgres-data:/var/lib/postgresql/data
+
 networks:
   tripnet:
     driver: bridge
@@ -139,3 +281,8 @@ networks:
 volumes:
   obot-data:
   eval-data:
+  langfuse-postgres-data:
+  langfuse-clickhouse-data:
+  langfuse-clickhouse-logs:
+  langfuse-minio-data:
+  langfuse-redis-data:

@@ -201,6 +201,16 @@ def _tally_by_server() -> dict:
     }
 
 
+def _langfuse_url() -> str | None:
+    """Browser link to the Langfuse trace list (Layer 3 trace timeline)."""
+    try:
+        from trip_planner.config import get_settings
+
+        return get_settings().langfuse_traces_url
+    except Exception:
+        return None
+
+
 def _confident_project_link(hist: list[dict]) -> str | None:
     for h in reversed(hist):
         link = h.get("confident_link")
@@ -250,6 +260,7 @@ def observability() -> dict:
         "pass_series": pass_series[-12:],
         "mcp": _tally_by_server(),
         "confident_observatory": _confident_project_link(hist),
+        "langfuse_url": _langfuse_url(),
         "obot_url": OBOT_URL,
         "use_gateway": get_settings_safe("use_gateway"),
     }
@@ -292,6 +303,7 @@ def flow_topology() -> dict:
     payload.update({
         "obot_url": OBOT_URL,
         "confident_observatory": _confident_project_link(_load_history()),
+        "langfuse_url": _langfuse_url(),
         "input": None,
         "usage": None,
     })
@@ -343,6 +355,7 @@ async def flow_capture(req: FlowRequest) -> dict:
         "duration_s": duration_s,
         "obot_url": OBOT_URL,
         "confident_observatory": _confident_project_link(_load_history()),
+        "langfuse_url": _langfuse_url(),
         "usage": {
             "calls": after.calls - before.calls,
             "input_tokens": after.input_tokens - before.input_tokens,

@@ -380,14 +380,14 @@ function FlowPanel() {
 
       <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px]">
         <LegendDot className="bg-emerald-500" label="fired in this run" />
-        {flow?.confident_observatory && (
+        {(flow?.langfuse_url || flow?.confident_observatory) && (
           <a
-            href={flow.confident_observatory}
+            href={(flow?.langfuse_url || flow?.confident_observatory) as string}
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-1 font-medium text-brand-600 hover:text-brand-700"
           >
-            Layer 3 · trace timeline (Confident AI)
+            Layer 3 · trace timeline ({flow?.langfuse_url ? "Langfuse" : "Confident AI"})
             <ExternalLink className="h-3 w-3" />
           </a>
         )}
@@ -661,16 +661,16 @@ function ObservabilityDashboard({ obs }: { obs: Observability | null }) {
         <Activity className="h-4 w-4 text-teal-600" />
         <h2 className="text-sm font-bold text-ink">Observability dashboard</h2>
         <span className="text-[11px] text-slate-400">
-          the headline metrics from Confident AI + Obot, in one place
+          the headline metrics from Langfuse + Obot, in one place
         </span>
         <div className="ml-auto flex gap-2">
           <a
-            href={obs?.confident_observatory ?? "https://app.confident-ai.com"}
+            href={obs?.langfuse_url ?? obs?.confident_observatory ?? "http://localhost:3001"}
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-1 rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1.5 text-[11px] font-medium text-brand-700 transition hover:bg-brand-100"
           >
-            Confident AI <ExternalLink className="h-3 w-3" />
+            {obs?.langfuse_url ? "Langfuse" : "Confident AI"} <ExternalLink className="h-3 w-3" />
           </a>
           <a
             href={obs?.obot_url ?? "http://localhost:8080"}
@@ -759,7 +759,7 @@ function ObservabilityDashboard({ obs }: { obs: Observability | null }) {
       <p className="mt-3 text-[10px] leading-relaxed text-slate-400">
         Aggregated and <b className="text-slate-600">retained</b> across all runs on this server.
         The full trace-timeline waterfall, cross-session trends, and per-span latency live in
-        Confident AI; the raw gateway audit lives in Obot — linked above.
+        Langfuse; the raw gateway audit lives in Obot — linked above.
       </p>
     </section>
   );

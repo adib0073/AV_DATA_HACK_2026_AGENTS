@@ -53,10 +53,37 @@ class Settings:
     use_gateway: bool = field(default_factory=lambda: _bool("USE_MCP_GATEWAY", False))
     gateway_token: str = field(default_factory=lambda: os.getenv("MCP_GATEWAY_TOKEN", ""))
 
+    # --- Tracing (Langfuse — Layer 3 trace timeline) ---
+    langfuse_public_key: str = field(default_factory=lambda: os.getenv("LANGFUSE_PUBLIC_KEY", ""))
+    langfuse_secret_key: str = field(default_factory=lambda: os.getenv("LANGFUSE_SECRET_KEY", ""))
+    # Host the agent posts traces to (in-cluster service name in Docker).
+    langfuse_host: str = field(
+        default_factory=lambda: os.getenv("LANGFUSE_HOST", "http://langfuse-web:3000")
+    )
+    # Browser-reachable base URL for building "open trace" links in the UI.
+    langfuse_public_url: str = field(
+        default_factory=lambda: os.getenv("LANGFUSE_PUBLIC_URL", "http://localhost:3001")
+    )
+    langfuse_project_id: str = field(
+        default_factory=lambda: os.getenv("LANGFUSE_PROJECT_ID", "trip-planner")
+    )
+    langfuse_tracing: bool = field(default_factory=lambda: _bool("LANGFUSE_TRACING_ENABLED", True))
+
     # --- Demo controls ---
     inject_regression: bool = field(
         default_factory=lambda: _bool("INJECT_REGRESSION", False)
     )
+
+    @property
+    def langfuse_enabled(self) -> bool:
+        return bool(self.langfuse_tracing and self.langfuse_public_key and self.langfuse_secret_key)
+
+    @property
+    def langfuse_traces_url(self) -> str | None:
+        """Browser link to this project's trace list in the Langfuse UI."""
+        if not (self.langfuse_public_url and self.langfuse_project_id):
+            return None
+        return f"{self.langfuse_public_url.rstrip('/')}/project/{self.langfuse_project_id}/traces"
 
     @property
     def cost_per_input_token(self) -> float:

@@ -22,6 +22,7 @@ from .config import get_settings
 from .metrics import reasoning_metrics
 from .observability import observe, update_current_span, update_current_trace
 from .state import TripState
+from .tracing_langfuse import langfuse_config
 
 _S = get_settings()
 # Layer 2 (Reasoning) metrics live on the root span, which has the full trace.
@@ -70,7 +71,9 @@ async def plan_trip(user_input: str) -> dict:
     update_current_trace(name="Trip planning", input=user_input)
 
     graph = build_graph()
-    result: TripState = await graph.ainvoke({"user_input": user_input})
+    result: TripState = await graph.ainvoke(
+        {"user_input": user_input}, config=langfuse_config("trip_planning")
+    )
 
     final = result.get("final_response", "")
     tool_trace = result.get("tool_trace", [])
@@ -129,7 +132,9 @@ async def _run_streaming(user_input: str, queue) -> None:
 
     final_state: dict = {"user_input": user_input}
     async for mode, chunk in graph.astream(
-        {"user_input": user_input}, stream_mode=["updates", "values"]
+        {"user_input": user_input},
+        stream_mode=["updates", "values"],
+        config=langfuse_config("trip_planning"),
     ):
         if mode == "values":
             final_state = chunk
@@ -173,9 +178,42 @@ async def _run_streaming(user_input: str, queue) -> None:
     })
 
 
+def _flatten_error(exc: BaseException) -> str:
+    """Produce a human-readable message, unwrapping ExceptionGroups.
+
+    asyncio/anyio TaskGroups raise ExceptionGroup, whose str() is the useless
+    "unhandled errors in a TaskGroup (1 sub-exception)". Dig out the real cause
+    (e.g. an httpx ConnectError to an MCP server) so the UI shows something
+    actionable.
+    """
+    parts: list[str] = []
+    seen: set[int] = set()
+
+    def _walk(e: BaseException) -> None:
+        if id(e) in seen:
+            return
+        seen.add(id(e))
+        subs = getattr(e, "exceptions", None)  # ExceptionGroup / BaseExceptionGroup
+        if subs:
+            for sub in subs:
+                _walk(sub)
+            return
+        msg = str(e).strip()
+        label = f"{type(e).__name__}: {msg}" if msg else type(e).__name__
+        parts.append(label)
+        if e.__cause__ is not None:
+            _walk(e.__cause__)
+
+    _walk(exc)
+    # De-dup while preserving order.
+    uniq = list(dict.fromkeys(parts))
+    return " | ".join(uniq) if uniq else str(exc)
+
+
 async def plan_trip_events(user_input: str):
     """Async generator of UI events for one trip-planning request."""
     import asyncio
+    import traceback
 
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -183,7 +221,8 @@ async def plan_trip_events(user_input: str):
         try:
             await _run_streaming(user_input, queue)
         except Exception as exc:  # surface errors as an event, don't hang the stream
-            await queue.put({"type": "error", "message": str(exc)})
+            traceback.print_exc()  # full traceback to the server logs for debugging
+            await queue.put({"type": "error", "message": _flatten_error(exc)})
         finally:
             await queue.put(None)
 

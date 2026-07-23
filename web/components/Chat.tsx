@@ -13,6 +13,7 @@ import type {
   Usage,
 } from "@/lib/types";
 import AgentActivity, { type Stage } from "./AgentActivity";
+import Markdown from "./Markdown";
 import TripDetails from "./TripDetails";
 import UsageMeter from "./UsageMeter";
 
@@ -267,15 +268,19 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       </span>
       <div className={`min-w-0 max-w-[85%] ${isUser ? "text-right" : ""}`}>
         <div
-          className={`inline-block whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm ${
+          className={`inline-block rounded-2xl px-4 py-2.5 text-sm ${
             isUser
-              ? "bg-brand-500 text-white"
+              ? "whitespace-pre-wrap bg-brand-500 text-white"
               : message.error
-                ? "border border-rose-200 bg-rose-50 text-rose-700"
-                : "border border-slate-200 bg-slate-50 text-slate-800"
+                ? "whitespace-pre-wrap border border-rose-200 bg-rose-50 text-rose-700"
+                : "w-full border border-slate-200 bg-white text-slate-800"
           }`}
         >
-          {message.content}
+          {isUser || message.error ? (
+            message.content
+          ) : (
+            <Markdown>{message.content}</Markdown>
+          )}
         </div>
         {message.state && (
           <div className="text-left">

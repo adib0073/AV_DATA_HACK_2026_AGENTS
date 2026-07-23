@@ -2,6 +2,7 @@
 
 import { BedDouble, CalendarCheck2, Map, Plane, Star } from "lucide-react";
 import type { TripState } from "@/lib/types";
+import Markdown from "./Markdown";
 
 export default function TripDetails({ state }: { state: TripState }) {
   const flight = state.selected_flight;
@@ -84,7 +85,7 @@ export default function TripDetails({ state }: { state: TripState }) {
           icon={<CalendarCheck2 className="h-4 w-4 text-fuchsia-600" />}
           className="sm:col-span-2"
         >
-          <p className="text-sm font-medium text-emerald-700">{booking.summary}</p>
+          <Markdown>{booking.summary}</Markdown>
         </Card>
       )}
     </div>

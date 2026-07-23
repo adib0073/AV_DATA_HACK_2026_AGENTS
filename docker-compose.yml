@@ -79,6 +79,15 @@ services:
       # Persist eval run history / uploaded goldens / tool tally across container
       # recreation (mounted volume below).
       EVAL_DATA_DIR: /app/.data
+      # Pin DeepEval's scratch cache to a stable ABSOLUTE dir (the default is the
+      # relative ".deepeval", resolved per-call against the cwd).
+      DEEPEVAL_CACHE_FOLDER: /app/.deepeval
+      # Don't persist DeepEval test runs to local disk. We read results straight
+      # from the eval iterator (in-memory) and view traces in Langfuse/Confident,
+      # so the local cache is unused. Disabling it removes a benign but noisy
+      # race where a trailing trace flush hits the temp file DeepEval already
+      # deleted at wrap-up ("Could not update test run on disk").
+      DEEPEVAL_FILE_SYSTEM: READ_ONLY
       # Obot link surfaced in the Eval Studio dashboard (browser-reachable URL).
       OBOT_PUBLIC_URL: ${OBOT_PUBLIC_URL:-http://localhost:8080}
       # Layer 3 trace timeline via self-hosted Langfuse (open-source). The agent

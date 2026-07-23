@@ -65,6 +65,16 @@ _MAX_HISTORY = 50
 # Only one eval run at a time (they share OpenAI rate budget + MCP servers).
 _run_lock = asyncio.Lock()
 
+# DeepEval prints these to stderr when a trailing trace flush races its own
+# end-of-run temp-file cleanup. They are benign (it falls back to in-memory
+# state and the run completes correctly), so we keep them out of the live
+# console to avoid alarming attendees. Everything else streams through.
+_BENIGN_LOG_SNIPPETS = (
+    "Could not update test run on disk",
+    "Could not load test run from disk",
+    "configured for read only environment",
+)
+
 
 def _data_dir() -> pathlib.Path:
     import goldens as G
@@ -472,8 +482,11 @@ async def run_eval(req: RunRequest):
             assert proc.stdout is not None
             async for raw in proc.stdout:
                 line = raw.decode("utf-8", errors="replace").rstrip("\n")
-                if line.strip():
-                    yield {"event": "log", "data": json.dumps({"line": line})}
+                if not line.strip():
+                    continue
+                if any(s in line for s in _BENIGN_LOG_SNIPPETS):
+                    continue  # benign DeepEval disk-race warning; don't surface it
+                yield {"event": "log", "data": json.dumps({"line": line})}
             code = await proc.wait()
 
             result = None

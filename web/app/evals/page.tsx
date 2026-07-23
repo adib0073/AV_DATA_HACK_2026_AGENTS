@@ -10,11 +10,11 @@ export default function EvalsPage() {
   return (
     <main className="min-h-screen">
       <TopNav />
-      <div className="mx-auto max-w-7xl px-4 pb-2">
-        <h2 className="text-lg font-semibold text-slate-100">
+      <div className="mx-auto max-w-7xl px-4 pb-2 pt-6">
+        <h2 className="text-2xl font-extrabold tracking-tight text-ink">
           Eval <span className="gradient-text">Studio</span>
         </h2>
-        <p className="mt-1 max-w-2xl text-sm text-slate-400">
+        <p className="mt-1 max-w-2xl text-sm text-slate-500">
           Run the multi-layer eval suite (end-to-end, component, shadow), upload your own
           golden dataset, and track aggregated observability — all in one place. Full
           trace timelines open in Confident AI.

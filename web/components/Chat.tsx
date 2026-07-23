@@ -161,7 +161,7 @@ export default function Chat() {
   }
 
   return (
-    <div className="mx-auto grid max-w-7xl gap-5 px-4 pb-10 lg:grid-cols-[1fr_380px]">
+    <div className="mx-auto grid max-w-7xl gap-5 px-4 pb-10 pt-6 lg:grid-cols-[1fr_380px]">
       {/* Conversation */}
       <section className="glass flex min-h-[70vh] flex-col overflow-hidden">
         <div className="flex-1 space-y-4 overflow-y-auto p-5">
@@ -170,8 +170,8 @@ export default function Chat() {
             <MessageBubble key={m.id} message={m} />
           ))}
           {running && messages[messages.length - 1]?.role === "user" && (
-            <div className="flex items-center gap-2 text-sm text-slate-400">
-              <span className="grid h-8 w-8 place-items-center rounded-full bg-brand-500/20 text-brand-300">
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <span className="grid h-8 w-8 place-items-center rounded-full bg-brand-50 text-brand-600">
                 <Bot className="h-4 w-4" />
               </span>
               <span className="shimmer rounded-lg px-2 py-1">
@@ -183,8 +183,8 @@ export default function Chat() {
         </div>
 
         {/* Composer */}
-        <div className="border-t border-white/10 p-4">
-          <div className="flex items-end gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-2 focus-within:border-brand-400/50">
+        <div className="border-t border-line p-4">
+          <div className="flex items-end gap-2 rounded-xl border border-slate-300 bg-white p-2 shadow-sm focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/20">
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -196,7 +196,7 @@ export default function Chat() {
               }}
               rows={1}
               placeholder="Describe your trip — destination, dates, travelers, budget, vibe…"
-              className="max-h-40 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none"
+              className="max-h-40 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-ink placeholder:text-slate-400 focus:outline-none"
             />
             <button
               onClick={() => send(input)}
@@ -216,7 +216,7 @@ export default function Chat() {
         <UsageMeter usage={usage} config={config} />
         <button
           onClick={onReset}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] py-2 text-xs text-slate-300 transition hover:bg-white/[0.06]"
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
         >
           <RotateCcw className="h-3.5 w-3.5" />
           Reset session usage
@@ -260,7 +260,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     <div className={`flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
       <span
         className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${
-          isUser ? "bg-white/10 text-slate-200" : "bg-brand-500/20 text-brand-300"
+          isUser ? "bg-slate-100 text-slate-600" : "bg-brand-50 text-brand-600"
         }`}
       >
         {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
@@ -269,10 +269,10 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         <div
           className={`inline-block whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm ${
             isUser
-              ? "bg-brand-500/90 text-white"
+              ? "bg-brand-500 text-white"
               : message.error
-                ? "border border-rose-400/30 bg-rose-500/10 text-rose-200"
-                : "border border-white/10 bg-white/[0.04] text-slate-100"
+                ? "border border-rose-200 bg-rose-50 text-rose-700"
+                : "border border-slate-200 bg-slate-50 text-slate-800"
           }`}
         >
           {message.content}
@@ -291,13 +291,13 @@ function EmptyState({ onPick }: { onPick: (s: string) => void }) {
   return (
     <div className="grid h-full place-items-center py-10 text-center animate-fade-up">
       <div>
-        <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-brand-500/15 text-brand-300">
+        <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-brand-50 text-brand-600">
           <Sparkles className="h-7 w-7" />
         </div>
-        <h2 className="text-lg font-semibold text-slate-100">
+        <h2 className="text-lg font-bold text-ink">
           Where would you like to go?
         </h2>
-        <p className="mx-auto mt-1 max-w-md text-sm text-slate-400">
+        <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
           Tell me your destination, dates or duration, travelers, budget and the
           kind of trip you want. The agents will plan it — and you can watch them
           work on the right.
@@ -307,7 +307,7 @@ function EmptyState({ onPick }: { onPick: (s: string) => void }) {
             <button
               key={e}
               onClick={() => onPick(e)}
-              className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-slate-300 transition hover:border-brand-400/40 hover:text-brand-200"
+              className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-600 transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-700"
             >
               {e.length > 52 ? e.slice(0, 52) + "…" : e}
             </button>

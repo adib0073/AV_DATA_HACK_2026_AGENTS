@@ -20,11 +20,11 @@ export const NODE_ICON: Record<string, LucideIcon> = {
 };
 
 export const NODE_ACCENT: Record<string, string> = {
-  planner: "text-brand-300",
-  supervisor: "text-slate-300",
-  flight: "text-sky-300",
-  hotel: "text-emerald-300",
-  itinerary: "text-amber-300",
-  booking: "text-fuchsia-300",
-  finalize: "text-teal-300",
+  planner: "text-brand-600",
+  supervisor: "text-slate-500",
+  flight: "text-sky-600",
+  hotel: "text-emerald-600",
+  itinerary: "text-amber-600",
+  booking: "text-fuchsia-600",
+  finalize: "text-teal-500",
 };

@@ -15,9 +15,9 @@ export default function TripDetails({ state }: { state: TripState }) {
   return (
     <div className="mt-3 grid gap-3 sm:grid-cols-2">
       {flight && (
-        <Card title="Flight" icon={<Plane className="h-4 w-4 text-sky-300" />}>
+        <Card title="Flight" icon={<Plane className="h-4 w-4 text-sky-600" />}>
           <div className="flex items-baseline justify-between">
-            <span className="font-medium text-slate-100">
+            <span className="font-semibold text-slate-800">
               {flight.airline ?? "Flight"}
             </span>
             <span className="gradient-text font-semibold">
@@ -33,17 +33,17 @@ export default function TripDetails({ state }: { state: TripState }) {
       )}
 
       {hotel && (
-        <Card title="Hotel" icon={<BedDouble className="h-4 w-4 text-emerald-300" />}>
+        <Card title="Hotel" icon={<BedDouble className="h-4 w-4 text-emerald-600" />}>
           <div className="flex items-baseline justify-between">
-            <span className="font-medium text-slate-100 truncate">{hotel.name}</span>
+            <span className="font-semibold text-slate-800 truncate">{hotel.name}</span>
             <span className="gradient-text font-semibold">
               {money(hotel.price, hotel.currency)}
-              <span className="text-xs text-slate-400">/night</span>
+              <span className="text-xs text-slate-500">/night</span>
             </span>
           </div>
           <Meta>
             <span className="inline-flex items-center gap-1">
-              <Star className="h-3 w-3 text-amber-300" />
+              <Star className="h-3 w-3 fill-amber-400 text-amber-500" />
               {hotel.rating ?? hotel.stars}
             </span>
             {hotel.neighborhood ? ` · ${hotel.neighborhood}` : ""}
@@ -55,19 +55,19 @@ export default function TripDetails({ state }: { state: TripState }) {
       {days.length > 0 && (
         <Card
           title="Itinerary"
-          icon={<Map className="h-4 w-4 text-amber-300" />}
+          icon={<Map className="h-4 w-4 text-amber-600" />}
           className="sm:col-span-2"
         >
           <div className="grid gap-2 sm:grid-cols-2">
             {days.map((d) => (
               <div
                 key={d.day}
-                className="rounded-lg border border-white/10 bg-white/[0.02] p-2.5"
+                className="rounded-lg border border-slate-200 bg-white p-2.5"
               >
-                <div className="text-xs font-semibold text-brand-200">
+                <div className="text-xs font-bold text-brand-700">
                   Day {d.day}
                 </div>
-                <ul className="mt-1 space-y-0.5 text-xs text-slate-300">
+                <ul className="mt-1 space-y-0.5 text-xs text-slate-600">
                   {d.morning && <li>🌅 {d.morning}</li>}
                   {d.afternoon && <li>☀️ {d.afternoon}</li>}
                   {d.evening && <li>🌙 {d.evening}</li>}
@@ -81,10 +81,10 @@ export default function TripDetails({ state }: { state: TripState }) {
       {booking && (
         <Card
           title="Booking"
-          icon={<CalendarCheck2 className="h-4 w-4 text-fuchsia-300" />}
+          icon={<CalendarCheck2 className="h-4 w-4 text-fuchsia-600" />}
           className="sm:col-span-2"
         >
-          <p className="text-sm text-emerald-200">{booking.summary}</p>
+          <p className="text-sm font-medium text-emerald-700">{booking.summary}</p>
         </Card>
       )}
     </div>
@@ -104,9 +104,9 @@ function Card({
 }) {
   return (
     <div
-      className={`rounded-xl border border-white/10 bg-white/[0.03] p-3.5 ${className}`}
+      className={`rounded-xl border border-slate-200 bg-slate-50 p-3.5 ${className}`}
     >
-      <div className="mb-2 flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-slate-400">
+      <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
         {icon}
         {title}
       </div>
@@ -116,7 +116,7 @@ function Card({
 }
 
 function Meta({ children }: { children: React.ReactNode }) {
-  return <p className="mt-1 text-xs text-slate-400">{children}</p>;
+  return <p className="mt-1 text-xs text-slate-500">{children}</p>;
 }
 
 function money(v?: number, currency = "USD") {

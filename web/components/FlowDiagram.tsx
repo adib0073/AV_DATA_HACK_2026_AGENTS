@@ -19,12 +19,12 @@ const COL_WIDTH = 220;
 const ROW_HEIGHT = 78;
 
 const KIND_STYLE: Record<FlowNodeKind, { bg: string; border: string; text: string; tag: string }> = {
-  user: { bg: "#0b1220", border: "#475569", text: "#e2e8f0", tag: "" },
-  orchestrator: { bg: "#1e1b4b", border: "#6366f1", text: "#e0e7ff", tag: "Layer 3" },
-  agent: { bg: "#0c1a2e", border: "#3b82f6", text: "#dbeafe", tag: "Layer 3" },
-  gateway: { bg: "#04211d", border: "#14b8a6", text: "#99f6e4", tag: "Layer 4" },
-  server: { bg: "#111827", border: "#64748b", text: "#e2e8f0", tag: "MCP" },
-  tool: { bg: "#0b1220", border: "#334155", text: "#94a3b8", tag: "" },
+  user: { bg: "#f1f5f9", border: "#94a3b8", text: "#334155", tag: "" },
+  orchestrator: { bg: "#eef2ff", border: "#6366f1", text: "#3730a3", tag: "Layer 3" },
+  agent: { bg: "#e7f1fb", border: "#0071c2", text: "#00487f", tag: "Layer 3" },
+  gateway: { bg: "#ccfbf1", border: "#0d9488", text: "#0f766e", tag: "Layer 4" },
+  server: { bg: "#f8fafc", border: "#64748b", text: "#334155", tag: "MCP" },
+  tool: { bg: "#ffffff", border: "#cbd5e1", text: "#64748b", tag: "" },
 };
 
 /** Custom node: shows label + sublabel + a layer/kind tag, lights up when fired. */
@@ -35,8 +35,10 @@ function FlowNode({ data }: NodeProps) {
     <div
       style={{
         background: k.bg,
-        border: `1.5px solid ${fired ? "#22c55e" : k.border}`,
-        boxShadow: fired ? "0 0 0 3px rgba(34,197,94,0.18)" : "none",
+        border: `1.5px solid ${fired ? "#16a34a" : k.border}`,
+        boxShadow: fired
+          ? "0 0 0 3px rgba(22,163,74,0.18)"
+          : "0 1px 2px rgba(15,23,42,0.08)",
         color: k.text,
         borderRadius: 10,
         padding: "8px 12px",
@@ -48,7 +50,7 @@ function FlowNode({ data }: NodeProps) {
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.2 }}>{data.label}</span>
         {fired && (
-          <span style={{ marginLeft: "auto", height: 7, width: 7, borderRadius: 999, background: "#22c55e" }} />
+          <span style={{ marginLeft: "auto", height: 7, width: 7, borderRadius: 999, background: "#16a34a" }} />
         )}
       </div>
       {data.sublabel && (
@@ -101,9 +103,9 @@ function layout(graph: FlowGraph): { nodes: Node[]; edges: Edge[] } {
     type: "smoothstep",
     animated: e.fired,
     style: {
-      stroke: e.fired ? "#22c55e" : "#334155",
+      stroke: e.fired ? "#16a34a" : "#cbd5e1",
       strokeWidth: e.fired ? 2 : 1,
-      opacity: graph.ran && anyFired && !e.fired ? 0.4 : 1,
+      opacity: graph.ran && anyFired && !e.fired ? 0.5 : 1,
     },
   }));
 
@@ -114,7 +116,7 @@ export default function FlowDiagram({ graph }: { graph: FlowGraph }) {
   const { nodes, edges } = useMemo(() => layout(graph), [graph]);
 
   return (
-    <div style={{ height: 460 }} className="rounded-lg border border-white/10 bg-black/30">
+    <div style={{ height: 460 }} className="rounded-lg border border-slate-200 bg-slate-50">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -128,7 +130,7 @@ export default function FlowDiagram({ graph }: { graph: FlowGraph }) {
         minZoom={0.3}
         maxZoom={1.5}
       >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#1e293b" />
+        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#cbd5e1" />
         <Controls showInteractive={false} />
       </ReactFlow>
     </div>

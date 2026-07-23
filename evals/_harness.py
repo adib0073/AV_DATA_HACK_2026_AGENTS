@@ -78,8 +78,15 @@ def select_goldens(limit: int | None = None, ensure: Iterable[str] = (REGRESSION
 # ---------------------------------------------------------------------------
 def run_e2e(goldens, metrics, *, print_results: bool = False, identifier: str | None = None,
             progress: bool = True):
-    """Run the full agent on each golden via evals_iterator; return the captured
-    DeepEval ``EvaluationResult`` (``.test_results`` + Confident AI link).
+    """Run the full agent on each golden via evals_iterator.
+
+    Returns ``(result, latencies, states)`` where ``result`` is the captured
+    DeepEval ``EvaluationResult`` (``.test_results`` + Confident AI link),
+    ``latencies`` is the per-golden agent wall-clock (seconds) and ``states`` is
+    the per-golden final ``TripState`` - both aligned to ``goldens`` order.
+    That wall-clock is the Layer-1 "Task Completion Latency" KPI (agent runtime
+    only - it excludes the judge scoring, which happens as the generator advances);
+    the states feed the deterministic Plan Quality / Plan Adherence rubric.
 
     Each golden runs the *whole* agent (~7 LLM calls) plus the judge, sequentially,
     so a full board takes minutes. We stream a one-line progress update per golden
@@ -96,6 +103,8 @@ def run_e2e(goldens, metrics, *, print_results: bool = False, identifier: str | 
     dataset = EvaluationDataset(goldens=goldens)
     loop = get_loop()
     result = None
+    latencies: list[float | None] = []
+    states: list[dict | None] = []
     gen = dataset.evals_iterator(
         metrics=metrics,
         identifier=identifier,
@@ -117,16 +126,25 @@ def run_e2e(goldens, metrics, *, print_results: bool = False, identifier: str | 
             if progress:
                 info(f"  [{idx}/{total}] running + scoring  ->  {dest} ...")
             t0 = time.time()
-            loop.run_until_complete(plan_trip(golden.input))
-            if progress:
+            try:
+                res = loop.run_until_complete(plan_trip(golden.input))
                 elapsed = time.time() - t0
+                latencies.append(round(elapsed, 2))
+                states.append(res.get("state") if isinstance(res, dict) else None)
+            except Exception as exc:  # keep the board alive if one golden explodes
+                elapsed = time.time() - t0
+                latencies.append(None)
+                states.append(None)
+                info(f"  [{idx}/{total}] errored after {elapsed:4.1f}s: {exc}")
+                continue
+            if progress:
                 avg = (time.time() - started) / idx
                 eta = avg * (total - idx)
                 info(f"  [{idx}/{total}] done in {elapsed:4.1f}s "
                      f"(elapsed {time.time() - started:4.0f}s, ~{eta:4.0f}s left)")
     except StopIteration as exc:
         result = exc.value
-    return result
+    return result, latencies, states
 
 
 # ---------------------------------------------------------------------------
@@ -230,6 +248,121 @@ def fmt_score(metric) -> str:
     if metric is None or metric.score is None:
         return "-"
     return f"{metric.score:.2f}"
+
+
+# ---------------------------------------------------------------------------
+# Small stats helpers (used to aggregate the framework KPIs per run)
+# ---------------------------------------------------------------------------
+def mean(xs) -> float | None:
+    vals = [float(x) for x in xs if x is not None]
+    return round(sum(vals) / len(vals), 4) if vals else None
+
+
+def pctl(xs, p: float) -> float | None:
+    """Linear-interpolated percentile (p in [0,1])."""
+    import math
+
+    vals = sorted(float(x) for x in xs if x is not None)
+    if not vals:
+        return None
+    k = (len(vals) - 1) * p
+    lo, hi = math.floor(k), math.ceil(k)
+    if lo == hi:
+        return round(vals[int(k)], 4)
+    return round(vals[lo] + (vals[hi] - vals[lo]) * (k - lo), 4)
+
+
+def metric_by_partial(bucket: dict, *needles: str):
+    """Find a MetricData in a by_input bucket by fuzzy name match.
+
+    DeepEval's metric ``.name`` differs subtly by version ("Plan Quality" vs
+    "PlanQuality"), so we match on a lower-cased, space-stripped substring.
+    """
+    if not bucket:
+        return None
+    wanted = [n.lower().replace(" ", "") for n in needles]
+    for name, m in bucket.items():
+        key = str(name).lower().replace(" ", "")
+        if any(w in key for w in wanted):
+            return m
+    return None
+
+
+def metric_score(bucket: dict, *needles: str) -> float | None:
+    m = metric_by_partial(bucket, *needles)
+    if m is None or getattr(m, "score", None) is None:
+        return None
+    return float(m.score)
+
+
+# ---------------------------------------------------------------------------
+# Deterministic Plan Quality / Plan Adherence rubric (Layer 2 - Reasoning).
+#
+# The framework scores these with a "rubric-based" judge. We use a transparent,
+# deterministic rubric over the agent's own plan + execution so the KPI is
+# reliable, explainable, and moves sensibly with the seeded regression - rather
+# than the noisy near-zero values a generic LLM-judge assigns to a coarse plan.
+#
+# The story it tells: a healthy run scores ~1.0 on both. The Tokyo regression
+# keeps Plan Quality high (the *plan* is fine) but drops Plan Adherence (the
+# flight step used the wrong tool and produced no flight) - i.e. the failure is
+# in execution, which the Layer-2 Action metric (ToolCorrectness) pinpoints.
+# ---------------------------------------------------------------------------
+_STEP_PRIMARY_TOOL = {
+    "search_flights": "search_flights",
+    "search_hotels": "search_hotels",
+    "build_itinerary": "search_activities",
+    "book_flight": "book_flight",
+    "book_hotel": "book_hotel",
+}
+_STEP_ARTIFACT = {
+    "search_flights": "selected_flight",
+    "search_hotels": "selected_hotel",
+    "build_itinerary": "itinerary",
+    "book_flight": "booking",
+    "book_hotel": "booking",
+}
+_CORE_STEPS = ("search_flights", "search_hotels", "build_itinerary")
+
+
+def plan_quality(state: dict | None) -> float | None:
+    """0-1: is the plan well-formed and complete?
+
+    domain coverage (flights + hotels + itinerary) 0.70 · all steps valid 0.15 ·
+    no duplicate steps 0.15.
+    """
+    if not state:
+        return None
+    plan = state.get("plan") or []
+    if not plan:
+        return 0.0
+    coverage = sum(1 for s in _CORE_STEPS if s in plan) / len(_CORE_STEPS)
+    valid = all(s in _STEP_PRIMARY_TOOL for s in plan)
+    dedup = len(plan) == len(set(plan))
+    return round(0.70 * coverage + 0.15 * float(valid) + 0.15 * float(dedup), 3)
+
+
+def plan_adherence(state: dict | None) -> float | None:
+    """0-1: did execution follow the plan?
+
+    each planned step produced its expected artifact 0.50 · each planned step
+    used its expected primary tool 0.50 (this half catches the seeded wrong-tool
+    regression: ``search_flights`` -> ``get_flight_details``).
+    """
+    if not state:
+        return None
+    plan = state.get("plan") or []
+    if not plan:
+        return None
+    called = {t.get("tool") for t in (state.get("tool_trace") or [])}
+    art_hits = tool_hits = 0
+    for step in plan:
+        art_key = _STEP_ARTIFACT.get(step)
+        art_hits += int(bool(art_key and state.get(art_key)))
+        expected = _STEP_PRIMARY_TOOL.get(step)
+        tool_hits += int(bool(expected and expected in called))
+    n = len(plan)
+    return round(0.5 * (art_hits / n) + 0.5 * (tool_hits / n), 3)
 
 
 def usage_dict() -> dict:

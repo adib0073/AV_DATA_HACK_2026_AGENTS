@@ -43,8 +43,8 @@ def main() -> None:
     from deepeval.metrics import ToolCorrectnessMetric
     from deepeval.test_case import LLMTestCase, ToolCall
 
-    from _harness import (flight_decision, hr, info, record_table, select_goldens,
-                          write_report)
+    from _harness import (flight_decision, hr, info, mean, record_table,
+                          select_goldens, write_report)
     from trip_planner.config import get_settings
 
     s = get_settings()
@@ -70,6 +70,7 @@ def main() -> None:
     tables: list = []
     goldens = select_goldens(limit=args.limit)
     rows, passed, total = [], 0, 0
+    tool_scores: list[float] = []
     for g in goldens:
         dest = (getattr(g, "additional_metadata", None) or {}).get("destination", "")
         if not dest or dest.lower() == "unspecified":
@@ -80,6 +81,7 @@ def main() -> None:
         sc, ok = score(called, decision["tool_args"])
         passed += int(ok)
         total += 1
+        tool_scores.append(sc)
         rows.append({
             "Destination": dest,
             "Tool called": ", ".join(called) or "<none>",
@@ -122,7 +124,12 @@ def main() -> None:
                 "regression": s.inject_regression, "gateway": s.use_gateway,
             },
             tables=tables,
-            stats={"passed": passed, "total": total},
+            stats={
+                "passed": passed,
+                "total": total,
+                "success_rate": round(passed / total, 4) if total else None,
+                "tool_correctness_avg": mean(tool_scores),
+            },
         )
 
 

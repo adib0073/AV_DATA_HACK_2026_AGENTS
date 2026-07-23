@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   CheckCircle2,
+  ClipboardCheck,
   Clock,
   Coins,
   Database,
@@ -12,10 +13,17 @@ import {
   Gauge,
   Layers,
   Loader2,
+  Minus,
   Network,
   Play,
   RotateCcw,
+  Route,
+  Scale,
   Server,
+  Target,
+  Timer,
+  TrendingDown,
+  TrendingUp,
   Upload,
   Wrench,
 } from "lucide-react";
@@ -38,7 +46,10 @@ import type {
   EvalTable,
   FlowResponse,
   GoldenItem,
+  KpiSummary,
   Observability,
+  QualityPoint,
+  ShadowAb,
 } from "@/lib/types";
 
 export default function EvalStudio() {
@@ -254,6 +265,9 @@ export default function EvalStudio() {
             </div>
           )}
         </section>
+
+        {/* Framework KPIs (Task Success Rate / Latency / Plan Quality / Adherence) */}
+        <FrameworkKpis obs={obs} />
 
         {/* Flow & traces (Layer 3 + Layer 4 in one view) */}
         <FlowPanel />
@@ -475,6 +489,16 @@ function ResultView({ result, langfuseUrl }: { result: EvalResult; langfuseUrl?:
           {"regressed" in s && (
             <Badge label={`regressed ${s.regressed}`} tone={s.regressed ? "red" : "muted"} />
           )}
+          {"p_value" in s && (
+            <Badge
+              label={
+                s.significant
+                  ? `A > B · p=${Number(s.p_value).toFixed(3)}`
+                  : `not significant · p=${Number(s.p_value).toFixed(3)}`
+              }
+              tone={s.significant ? "green" : "muted"}
+            />
+          )}
           {result.regression !== undefined && (
             <Badge
               label={`regression ${result.regression ? "ON" : "off"}`}
@@ -651,6 +675,300 @@ function GoldensCard({
   );
 }
 
+/* ---- Framework KPIs (Task Success Rate / Latency / Plan Quality & Adherence) */
+
+type KpiKey = "success_rate" | "latency_avg_s" | "plan_quality" | "plan_adherence";
+
+const KPI_CARDS: {
+  key: KpiKey;
+  label: string;
+  layer: string;
+  color: string;
+  icon: ReactNode;
+  higherBetter: boolean;
+  fmt: (v: number) => string;
+}[] = [
+  {
+    key: "success_rate",
+    label: "Task Success Rate",
+    layer: "Layer 1 · E2E",
+    color: "#059669",
+    icon: <Target className="h-3.5 w-3.5" />,
+    higherBetter: true,
+    fmt: (v) => `${Math.round(v * 100)}%`,
+  },
+  {
+    key: "latency_avg_s",
+    label: "Task Completion Latency",
+    layer: "Layer 1 · E2E",
+    color: "#0071c2",
+    icon: <Timer className="h-3.5 w-3.5" />,
+    higherBetter: false,
+    fmt: (v) => `${v.toFixed(1)}s`,
+  },
+  {
+    key: "plan_quality",
+    label: "Plan Quality",
+    layer: "Layer 2 · Reasoning",
+    color: "#0097A7",
+    icon: <ClipboardCheck className="h-3.5 w-3.5" />,
+    higherBetter: true,
+    fmt: (v) => v.toFixed(2),
+  },
+  {
+    key: "plan_adherence",
+    label: "Plan Adherence",
+    layer: "Layer 2 · Reasoning",
+    color: "#7c3aed",
+    icon: <Route className="h-3.5 w-3.5" />,
+    higherBetter: true,
+    fmt: (v) => v.toFixed(2),
+  },
+];
+
+function FrameworkKpis({ obs }: { obs: Observability | null }) {
+  const k = obs?.kpis;
+  const series = obs?.quality_series ?? [];
+  const ab = obs?.shadow_ab ?? null;
+  const hasAny = KPI_CARDS.some((c) => k?.[c.key]);
+
+  return (
+    <section className="glass p-5">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Gauge className="h-4 w-4 text-brand-600" />
+        <h2 className="text-sm font-bold text-ink">Framework KPIs</h2>
+        <span className="rounded bg-brand-100 px-1.5 py-0.5 text-[10px] font-medium text-brand-700">
+          Layer 1 + 2
+        </span>
+        <span className="ml-auto text-[11px] text-slate-400">
+          aggregated across runs · updates on every eval
+        </span>
+      </div>
+
+      {hasAny ? (
+        <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+          {KPI_CARDS.map((c) => (
+            <KpiCard
+              key={c.key}
+              def={c}
+              kpi={k?.[c.key] ?? null}
+              values={series
+                .map((p) => p[c.key])
+                .filter((v): v is number => v != null)}
+            />
+          ))}
+        </div>
+      ) : (
+        <Empty hint="Run Layer 1 to populate Task Success Rate, Latency, Plan Quality & Adherence." />
+      )}
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <PlanTrendChart series={series} />
+        <AbCard ab={ab} />
+      </div>
+    </section>
+  );
+}
+
+function KpiCard({
+  def,
+  kpi,
+  values,
+}: {
+  def: (typeof KPI_CARDS)[number];
+  kpi: KpiSummary | null;
+  values: number[];
+}) {
+  const latest = kpi?.latest ?? null;
+  const prev = kpi?.prev ?? null;
+  const delta = latest != null && prev != null ? latest - prev : null;
+  const flat = delta == null || Math.abs(delta) < 1e-9;
+  const improved = flat ? null : def.higherBetter ? (delta as number) > 0 : (delta as number) < 0;
+  const deltaColor = flat ? "text-slate-400" : improved ? "text-emerald-600" : "text-rose-600";
+  const Arrow = flat ? Minus : (delta as number) > 0 ? TrendingUp : TrendingDown;
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <div
+        className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide"
+        style={{ color: def.color }}
+      >
+        {def.icon}
+        <span className="truncate">{def.label}</span>
+      </div>
+      <div className="mt-1 flex items-end gap-2">
+        <span className="text-2xl font-bold tabular-nums text-slate-900">
+          {latest != null ? def.fmt(latest) : "—"}
+        </span>
+        {!flat && delta != null && (
+          <span className={`mb-0.5 flex items-center gap-0.5 text-[11px] font-semibold ${deltaColor}`}>
+            <Arrow className="h-3 w-3" />
+            {def.fmt(Math.abs(delta))}
+          </span>
+        )}
+      </div>
+      <div className="mt-1.5">
+        <Sparkline values={values} color={def.color} />
+      </div>
+      <div className="mt-1 flex items-center justify-between text-[9px] text-slate-400">
+        <span>{def.layer}</span>
+        {kpi && <span>avg {def.fmt(kpi.avg)}</span>}
+      </div>
+    </div>
+  );
+}
+
+function Sparkline({ values, color }: { values: number[]; color: string }) {
+  const w = 120;
+  const h = 26;
+  if (values.length < 2) {
+    return <div className="flex h-[26px] items-center text-[9px] text-slate-300">— need 2+ runs —</div>;
+  }
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const xy = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * (w - 2) + 1;
+    const y = h - 2 - ((v - min) / span) * (h - 4);
+    return [x, y] as const;
+  });
+  const pts = xy.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const [lx, ly] = xy[xy.length - 1];
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="h-[26px] w-full" preserveAspectRatio="none">
+      <polyline
+        points={pts}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      <circle cx={lx} cy={ly} r={2} fill={color} />
+    </svg>
+  );
+}
+
+function PlanTrendChart({ series }: { series: QualityPoint[] }) {
+  const pq = series.map((p) => p.plan_quality);
+  const pa = series.map((p) => p.plan_adherence);
+  const has = pq.some((v) => v != null) || pa.some((v) => v != null);
+  const w = 260;
+  const h = 96;
+  const pad = 6;
+  const thresholdY = h - pad - 0.7 * (h - 2 * pad); // metric pass line at 0.70
+
+  const line = (vals: (number | null)[]) => {
+    const idx = vals.map((v, i) => [i, v] as const).filter(([, v]) => v != null) as [number, number][];
+    if (idx.length < 2) return "";
+    return idx
+      .map(([i, v]) => {
+        const x = (i / (vals.length - 1)) * (w - 2 * pad) + pad;
+        const y = h - pad - v * (h - 2 * pad);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(" ");
+  };
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-slate-700">
+        <ClipboardCheck className="h-3.5 w-3.5 text-teal-600" />
+        Plan Quality &amp; Adherence — by run
+      </div>
+      {has ? (
+        <>
+          <svg viewBox={`0 0 ${w} ${h}`} className="h-24 w-full" preserveAspectRatio="none">
+            <line x1={pad} y1={thresholdY} x2={w - pad} y2={thresholdY} stroke="#cbd5e1" strokeWidth={1} strokeDasharray="3 3" />
+            <polyline points={line(pq)} fill="none" stroke="#0097A7" strokeWidth={1.75} strokeLinejoin="round" />
+            <polyline points={line(pa)} fill="none" stroke="#7c3aed" strokeWidth={1.75} strokeLinejoin="round" />
+          </svg>
+          <div className="mt-1 flex items-center gap-3 text-[9px] text-slate-400">
+            <LegendDot className="bg-teal-500" label="plan quality" />
+            <LegendDot className="bg-violet-500" label="plan adherence" />
+            <span className="ml-auto">dashed = 0.70 pass line</span>
+          </div>
+        </>
+      ) : (
+        <Empty hint="Run Layer 1 — reasoning metrics chart here." />
+      )}
+    </div>
+  );
+}
+
+function AbCard({ ab }: { ab: ShadowAb | null }) {
+  if (!ab || ab.a_rate == null || ab.b_rate == null) {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-slate-700">
+          <Scale className="h-3.5 w-3.5 text-brand-600" />
+          Shadow A/B — significance
+        </div>
+        <Empty hint="Run Shadow mode to A/B test the candidate vs baseline." />
+      </div>
+    );
+  }
+  const a = Math.round(ab.a_rate * 100);
+  const b = Math.round(ab.b_rate * 100);
+  const lift = (ab.lift ?? 0) * 100;
+  const sig = !!ab.significant;
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-slate-700">
+        <Scale className="h-3.5 w-3.5 text-brand-600" />
+        Shadow A/B — significance
+        <span
+          className={`ml-auto rounded px-1.5 py-0.5 text-[9px] font-semibold ${
+            sig ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"
+          }`}
+        >
+          {sig ? "significant" : "not significant"}
+        </span>
+      </div>
+
+      <div className="space-y-2">
+        <AbBar label="A · candidate" pct={a} color="bg-emerald-500" />
+        <AbBar label="B · baseline" pct={b} color="bg-slate-400" />
+      </div>
+
+      <div className="mt-2.5 grid grid-cols-3 gap-2 text-center text-[10px]">
+        <AbStat label="lift" value={`${lift >= 0 ? "+" : ""}${lift.toFixed(1)} pp`} />
+        <AbStat label="p-value" value={ab.p_value != null ? ab.p_value.toFixed(3) : "—"} />
+        <AbStat label="requests/arm" value={ab.trials != null ? String(ab.trials) : "—"} />
+      </div>
+      {ab.ci_low != null && ab.ci_high != null && (
+        <p className="mt-2 text-center text-[9px] text-slate-400">
+          95% CI on lift [{(ab.ci_low * 100).toFixed(1)}, {(ab.ci_high * 100).toFixed(1)}] pp
+          {ab.regressed ? ` · regressed ${ab.regressed}` : ""}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function AbBar({ label, pct, color }: { label: string; pct: number; color: string }) {
+  return (
+    <div className="text-[10px]">
+      <div className="mb-0.5 flex items-center justify-between text-slate-500">
+        <span>{label}</span>
+        <span className="font-semibold text-slate-700">{pct}%</span>
+      </div>
+      <div className="h-2 w-full overflow-hidden rounded bg-slate-200">
+        <div className={`h-full rounded ${color}`} style={{ width: `${Math.max(pct, 2)}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function AbStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-white px-1.5 py-1">
+      <div className="text-[9px] uppercase tracking-wide text-slate-400">{label}</div>
+      <div className="font-bold tabular-nums text-slate-800">{value}</div>
+    </div>
+  );
+}
+
 function ObservabilityDashboard({ obs }: { obs: Observability | null }) {
   const a = obs?.aggregate;
   const mcp = obs?.mcp;
@@ -816,7 +1134,7 @@ function RecentRunsCard({ obs }: { obs: Observability | null }) {
 
 function summarizeStats(stats: Record<string, number>): string {
   if ("passed" in stats) return `${stats.passed}/${stats.total} passed`;
-  if ("candidate_pass" in stats)
+  if ("version_a_pass" in stats || "candidate_pass" in stats)
     return `fixed ${stats.fixed} · regressed ${stats.regressed}`;
   return "";
 }

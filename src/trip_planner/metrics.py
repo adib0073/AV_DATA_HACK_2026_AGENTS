@@ -71,10 +71,24 @@ def e2e_metrics(include_step_efficiency: bool = False) -> list:
 
 
 def reasoning_metrics() -> list:
-    """Layer 2 (Reasoning) - attach to the planner / root agent span."""
+    """Layer 2 (Reasoning) - attach to the planner / root agent span.
+
+    Off by default. The Eval Studio dashboard scores Plan Quality / Plan
+    Adherence with a fast, deterministic rubric (see ``evals/_harness.py``),
+    which is reliable for a live demo. Set ``USE_LLM_REASONING_METRICS=true`` to
+    additionally attach DeepEval's LLM-as-judge Plan* metrics to the trace (they
+    show up in Langfuse but add two judge calls per run and score a coarse plan
+    conservatively). ``DEEPEVAL_VERBOSE_REASONING=1`` prints the judge's reason.
+    """
+    import os
+
+    if os.getenv("USE_LLM_REASONING_METRICS", "").lower() not in {"1", "true", "yes"}:
+        return []
+
+    verbose = os.getenv("DEEPEVAL_VERBOSE_REASONING", "").lower() in {"1", "true", "yes"}
     metrics = [
-        _try("PlanQualityMetric", threshold=0.7, model=_judge()),
-        _try("PlanAdherenceMetric", threshold=0.7, model=_judge()),
+        _try("PlanQualityMetric", threshold=0.7, model=_judge(), verbose_mode=verbose),
+        _try("PlanAdherenceMetric", threshold=0.7, model=_judge(), verbose_mode=verbose),
     ]
     return [m for m in metrics if m is not None]
 

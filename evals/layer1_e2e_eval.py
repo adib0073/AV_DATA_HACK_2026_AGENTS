@@ -39,8 +39,9 @@ def main() -> None:
     if args.regression is not None:
         os.environ["INJECT_REGRESSION"] = "true" if args.regression == "on" else "false"
 
-    from _harness import (by_input, confident_link, fmt_score, hr, info,
-                          record_table, run_e2e, select_goldens, write_report)
+    from _harness import (by_input, confident_link, fmt_score, hr, info, mean,
+                          pctl, plan_adherence, plan_quality, record_table,
+                          run_e2e, select_goldens, write_report)
     from trip_planner.config import get_settings
     from trip_planner.metrics import e2e_metrics
 
@@ -57,20 +58,23 @@ def main() -> None:
         return
     info(f"goldens={len(goldens)}   metrics={[type(m).__name__ for m in metrics]}\n")
 
-    result = run_e2e(goldens, metrics, print_results=False, identifier="layer1-e2e")
+    result, latencies, states = run_e2e(goldens, metrics, print_results=False,
+                                        identifier="layer1-e2e")
     if result is None:
         info("Evaluation did not produce results.")
         return
 
     flat = by_input(result.test_results)
     show_step = any(type(m).__name__ == "StepEfficiencyMetric" for m in metrics)
-    columns = ["Destination", "Task Completion"]
+
+    columns = ["Destination", "Task Completion", "Plan Quality", "Plan Adherence"]
     if show_step:
         columns.append("Step Efficiency")
-    columns.append("Status")
+    columns += ["Latency (s)", "Status"]
 
     rows, passed = [], 0
-    for g in goldens:
+    task_scores, pq_scores, pa_scores, lat_ok = [], [], [], []
+    for i, g in enumerate(goldens):
         m = flat.get(g.input, {})
         task = m.get("Task Completion")
         step = m.get("Step Efficiency")
@@ -78,18 +82,65 @@ def main() -> None:
         ok = bool(present) and all(x.success for x in present)
         passed += int(ok)
         dest = (getattr(g, "additional_metadata", None) or {}).get("destination", "?")
+        lat = latencies[i] if i < len(latencies) else None
+        st = states[i] if i < len(states) else None
+        pq = plan_quality(st)
+        pa = plan_adherence(st)
+
+        task_scores.append(task.score if task and task.score is not None else None)
+        pq_scores.append(pq)
+        pa_scores.append(pa)
+        lat_ok.append(lat)
+
         row = {
             "Destination": dest,
             "Task Completion": fmt_score(task),
+            "Plan Quality": f"{pq:.2f}" if pq is not None else "-",
+            "Plan Adherence": f"{pa:.2f}" if pa is not None else "-",
             "Status": "PASS" if ok else "FAIL",
+            "Latency (s)": f"{lat:.1f}" if lat is not None else "-",
         }
         if show_step:
             row["Step Efficiency"] = fmt_score(step)
         rows.append(row)
 
+    total = len(goldens)
+    stats = {
+        "passed": passed,
+        "total": total,
+        "success_rate": round(passed / total, 4) if total else None,
+        "task_completion_avg": mean(task_scores),
+        "plan_quality_avg": mean(pq_scores),
+        "plan_adherence_avg": mean(pa_scores),
+        "latency_avg_s": mean(lat_ok),
+        "latency_p95_s": pctl(lat_ok, 0.95),
+    }
+
     tables: list = []
-    title = f"Layer 1 results  -  {passed}/{len(goldens)} passed"
+    title = f"Layer 1 results  -  {passed}/{total} passed"
     record_table(tables, title, rows, columns)
+
+    # A compact KPI roll-up so the framework metrics are legible in the console too.
+    def _pct(x):
+        return f"{x * 100:.0f}%" if x is not None else "-"
+
+    def _sc(x):
+        return f"{x:.2f}" if x is not None else "-"
+
+    record_table(
+        tables,
+        "Aggregate KPIs (this run)",
+        [
+            {"KPI": "Task Success Rate", "Value": _pct(stats["success_rate"]), "Layer": "1 - E2E"},
+            {"KPI": "Task Completion (avg score)", "Value": _sc(stats["task_completion_avg"]), "Layer": "1 - E2E"},
+            {"KPI": "Task Completion Latency (avg)",
+             "Value": f"{stats['latency_avg_s']:.1f}s" if stats["latency_avg_s"] is not None else "-",
+             "Layer": "1 - E2E"},
+            {"KPI": "Plan Quality (avg)", "Value": _sc(stats["plan_quality_avg"]), "Layer": "2 - Reasoning"},
+            {"KPI": "Plan Adherence (avg)", "Value": _sc(stats["plan_adherence_avg"]), "Layer": "2 - Reasoning"},
+        ],
+        ["KPI", "Value", "Layer"],
+    )
     confident_link(result)
     info("\nLayer 1 tells you *that* a case failed. Open its trace (or run "
          "layer2_component_eval.py) to see *why*.")
@@ -104,7 +155,7 @@ def main() -> None:
                 "regression": s.inject_regression, "gateway": s.use_gateway,
             },
             tables=tables,
-            stats={"passed": passed, "total": len(goldens)},
+            stats=stats,
             confident_link=getattr(result, "confident_link", None),
         )
 

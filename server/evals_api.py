@@ -254,10 +254,72 @@ def observability() -> dict:
         if h.get("suite") == "layer1" and h.get("stats", {}).get("total")
     ]
 
+    # Framework KPIs (per the 4-layer slide): Task Success Rate + Task Completion
+    # Latency (Layer 1), Plan Quality + Plan Adherence (Layer 2 reasoning). These
+    # are aggregated per Layer-1 run so the dashboard refreshes on every eval.
+    quality_series: list[dict] = []
+    for h in hist:
+        if h.get("suite") != "layer1":
+            continue
+        st = h.get("stats", {}) or {}
+        if not st.get("total"):
+            continue
+        sr = st.get("success_rate")
+        if sr is None and st.get("total"):
+            sr = round(st.get("passed", 0) / st["total"], 4)
+        quality_series.append({
+            "ts": h["ts"],
+            "regression": h.get("regression"),
+            "success_rate": sr,
+            "task_completion": st.get("task_completion_avg"),
+            "plan_quality": st.get("plan_quality_avg"),
+            "plan_adherence": st.get("plan_adherence_avg"),
+            "latency_avg_s": st.get("latency_avg_s"),
+        })
+    quality_series = quality_series[-12:]
+
+    def _kpi(key: str) -> dict | None:
+        pts = [(p["ts"], p[key]) for p in quality_series if p.get(key) is not None]
+        if not pts:
+            return None
+        return {
+            "latest": pts[-1][1],
+            "prev": pts[-2][1] if len(pts) >= 2 else None,
+            "avg": round(sum(v for _, v in pts) / len(pts), 4),
+            "n": len(pts),
+        }
+
+    kpis = {
+        "success_rate": _kpi("success_rate"),
+        "latency_avg_s": _kpi("latency_avg_s"),
+        "task_completion": _kpi("task_completion"),
+        "plan_quality": _kpi("plan_quality"),
+        "plan_adherence": _kpi("plan_adherence"),
+    }
+
+    # Latest shadow A/B outcome (for the significance card).
+    shadow_ab = None
+    for h in reversed(hist):
+        st = h.get("stats", {}) or {}
+        if h.get("suite") == "shadow" and st.get("trials"):
+            shadow_ab = {
+                "ts": h["ts"],
+                "a_rate": st.get("a_rate"), "b_rate": st.get("b_rate"),
+                "lift": st.get("lift"), "p_value": st.get("p_value"),
+                "significant": st.get("significant"),
+                "ci_low": st.get("ci_low"), "ci_high": st.get("ci_high"),
+                "trials": st.get("trials"),
+                "fixed": st.get("fixed"), "regressed": st.get("regressed"),
+            }
+            break
+
     return {
         "aggregate": agg,
         "history": list(reversed(hist)),
         "pass_series": pass_series[-12:],
+        "quality_series": quality_series,
+        "kpis": kpis,
+        "shadow_ab": shadow_ab,
         "mcp": _tally_by_server(),
         "confident_observatory": _confident_project_link(hist),
         "langfuse_url": _langfuse_url(),

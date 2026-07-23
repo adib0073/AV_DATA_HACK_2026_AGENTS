@@ -85,7 +85,7 @@ export default function TripDetails({ state }: { state: TripState }) {
           icon={<CalendarCheck2 className="h-4 w-4 text-fuchsia-600" />}
           className="sm:col-span-2"
         >
-          <Markdown>{booking.summary}</Markdown>
+          <Markdown>{booking.summary ?? ""}</Markdown>
         </Card>
       )}
     </div>

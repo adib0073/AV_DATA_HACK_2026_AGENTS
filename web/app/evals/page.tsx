@@ -17,7 +17,7 @@ export default function EvalsPage() {
         <p className="mt-1 max-w-2xl text-sm text-slate-500">
           Run the multi-layer eval suite (end-to-end, component, shadow), upload your own
           golden dataset, and track aggregated observability — all in one place. Full
-          trace timelines open in Confident AI.
+          trace timelines open in Langfuse.
         </p>
       </div>
       <EvalStudio />

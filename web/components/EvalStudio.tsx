@@ -259,7 +259,7 @@ export default function EvalStudio() {
         <FlowPanel />
 
         {/* Results */}
-        {result && <ResultView result={result} />}
+        {result && <ResultView result={result} langfuseUrl={obs?.langfuse_url ?? null} />}
 
         {/* Live console */}
         {(running || log.length > 0) && (
@@ -279,7 +279,7 @@ export default function EvalStudio() {
           </section>
         )}
 
-        {/* Observability dashboard (Confident AI + Obot, in one view) */}
+        {/* Observability dashboard (Langfuse + Obot, in one view) */}
         <ObservabilityDashboard obs={obs} />
       </div>
 
@@ -387,7 +387,7 @@ function FlowPanel() {
             rel="noreferrer"
             className="flex items-center gap-1 font-medium text-brand-600 hover:text-brand-700"
           >
-            Layer 3 · trace timeline ({flow?.langfuse_url ? "Langfuse" : "Confident AI"})
+            Layer 3 · trace timeline (Langfuse)
             <ExternalLink className="h-3 w-3" />
           </a>
         )}
@@ -459,8 +459,9 @@ function LegendDot({ className, label }: { className: string; label: string }) {
   );
 }
 
-function ResultView({ result }: { result: EvalResult }) {
+function ResultView({ result, langfuseUrl }: { result: EvalResult; langfuseUrl?: string | null }) {
   const s = result.stats ?? {};
+  const traceUrl = langfuseUrl || result.confident_link;
   return (
     <section className="glass p-5">
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -499,14 +500,14 @@ function ResultView({ result }: { result: EvalResult }) {
           {result.usage.calls} agent calls · {result.usage.total_tokens.toLocaleString()} tokens · $
           {result.usage.cost_usd.toFixed(4)}
         </span>
-        {result.confident_link && (
+        {traceUrl && (
           <a
-            href={result.confident_link}
+            href={traceUrl}
             target="_blank"
             rel="noreferrer"
             className="ml-auto flex items-center gap-1 font-medium text-brand-600 hover:text-brand-700"
           >
-            Open full trace timeline in Confident AI
+            Open full trace timeline in Langfuse
             <ExternalLink className="h-3.5 w-3.5" />
           </a>
         )}
@@ -665,12 +666,12 @@ function ObservabilityDashboard({ obs }: { obs: Observability | null }) {
         </span>
         <div className="ml-auto flex gap-2">
           <a
-            href={obs?.langfuse_url ?? obs?.confident_observatory ?? "http://localhost:3001"}
+            href={obs?.langfuse_url ?? "http://localhost:3001"}
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-1 rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1.5 text-[11px] font-medium text-brand-700 transition hover:bg-brand-100"
           >
-            {obs?.langfuse_url ? "Langfuse" : "Confident AI"} <ExternalLink className="h-3 w-3" />
+            Langfuse <ExternalLink className="h-3 w-3" />
           </a>
           <a
             href={obs?.obot_url ?? "http://localhost:8080"}
@@ -694,7 +695,7 @@ function ObservabilityDashboard({ obs }: { obs: Observability | null }) {
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        {/* Layer 1 pass-rate trend (Confident AI "Test Runs") */}
+        {/* Layer 1 pass-rate trend (Langfuse / Test Runs) */}
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
           <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-slate-700">
             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
@@ -785,11 +786,12 @@ function RecentRunsCard({ obs }: { obs: Observability | null }) {
                   {h.suite}
                 </span>
                 <span className="text-slate-600">{summarizeStats(h.stats)}</span>
-                {h.confident_link && (
+                {obs?.langfuse_url && (
                   <a
-                    href={h.confident_link}
+                    href={obs.langfuse_url}
                     target="_blank"
                     rel="noreferrer"
+                    title="Open traces in Langfuse"
                     className="ml-auto text-brand-600 hover:text-brand-700"
                   >
                     <ExternalLink className="h-3 w-3" />
